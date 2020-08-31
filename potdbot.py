@@ -25,11 +25,13 @@ async def on_ready():
 @client.command()
 async def help(ctx):
     embed = discord.Embed(title = 'POTD Bot Help', description = 'List of commands for POTD Bot', colour = discord.Colour.blue())
-    embed.add_field(name='!help', value='Pulls up this help page.')
-    embed.add_field(name='!points', value='Checks how many points you have from POTDs. Aliases include !pts', inline = False)
-    embed.add_field(name='!leaderboard', value='Pulls up the leaderboard for the POTDs. Aliases include !lb')
-    embed.add_field(name='!change_problem', value='Changes points and answer value for the POTD. Can only be used by Heran.', inline = False)
-    embed.add_field(name='How to answer POTDs', value='Instructions are pinned in the announcements page.', inline = False)
+    embed.add_field(name='help', value='Pulls up this help page.', inline = False)
+    embed.add_field(name='points', value='Checks how many points you have from POTDs. Aliases include pts', inline = False)
+    embed.add_field(name='leaderboard', value='Pulls up the leaderboard for the POTDs. Aliases include lb', inline = False)
+    embed.add_field(name='change_problem', value='change_problem {problem ans} {point value}: Changes points and answer value for the POTD. Can only be used by staff.', inline = False)
+    embed.add_field(name='change_points', value='change_points {member id} {point value}: Change points for member id and point value. Can only used by staff', inline = False)
+    embed.add_field(name='add_member', value='add_member {member id}:Adds member to the bot by member id. This allows them to be on the leaderboard.', inline = False)
+    embed.add_field(name='How to answer POTDs', value='DM POTD Bot with your answer! Lower and upper case letters both work for multiple choice.', inline = False)
     await ctx.send(embed=embed)
 
 @client.command(aliases = ['lb'])
@@ -63,6 +65,12 @@ async def change_problem(ctx, arg1, arg2):
 
 @client.command()
 @commands.check(check_staff)
+async def add_member(ctx, arg1):
+    Members[1].append(int(arg1))
+    await ctx.send('Member '+arg1+' was added.')
+
+@client.command()
+@commands.check(check_staff)
 async def change_points(ctx, arg1, arg2):
     Points[int(arg1)] = int(arg2)
     await ctx.send('Member '+arg1+' points has been changed to '+arg2)
@@ -73,51 +81,52 @@ async def points(ctx):
 
 @client.event
 async def on_message(message):
-    str(POTD_Answer[1])
-    if message.author == client.user:
-        return
-    if Finished_POTD[message.author.id] != 1:
-        if message.content == ('ans=' + POTD_Answer[1]):
-            server = client.get_guild(748268625491656755)
-            role = server.get_role(748370861727416341)
-            role2 = server.get_role(748635877571297421)
-            channel = client.get_channel(748269407964364890)
-            solver = server.get_member(message.author.id)
-            is_member = False
+    if isinstance(message.channel, discord.channel.DMChannel):
+        str(POTD_Answer[1])
+        if message.author == client.user:
+            return
+        if Finished_POTD[message.author.id] != 1:
+            if message.content == POTD_Answer[1] or message.content == POTD_Answer[1].lower():
+                server = client.get_guild(748268625491656755)
+                role = server.get_role(748370861727416341)
+                role2 = server.get_role(748635877571297421)
+                channel = client.get_channel(748269407964364890)
+                solver = server.get_member(message.author.id)
+                is_member = False
             
-            Points[message.author.id] = Points[message.author.id] + int(Points[0])
-            await message.author.send('Congratulations! You solved todays POTD! You earned '+str(Points[0])+' points!')
-            Finished_POTD[message.author.id] = 1
-            int(Points[0])
+                Points[message.author.id] = Points[message.author.id] + int(Points[0])
+                await message.author.send('Congratulations! You solved todays POTD! You earned '+str(Points[0])+' points!')
+                Finished_POTD[message.author.id] = 1
+                int(Points[0])
 
-            for i in Members[1]:
-                if i==message.author.id:
-                    is_member = True
-            if is_member == False:
-                Members[1].append(message.author.id)
+                for i in Members[1]:
+                    if i==message.author.id:
+                        is_member = True
+                if is_member == False:
+                    Members[1].append(message.author.id)
+                
+                await channel.send('Congratulations {} for successfully solving todays POTD!'.format(message.author.mention))
+                await solver.add_roles(role)
+                await solver.add_roles(role2)
+            else:
+                server = client.get_guild(748268625491656755)
+                role2 = server.get_role(748635877571297421)
+                solver = server.get_member(message.author.id)
+                is_member = False
+
+                await message.author.send('Unfortunately, you got the problem wrong. You dont get any points today. :(')
+                Finished_POTD[message.author.id] = 1
+
+                for i in Members[1]:
+                    if i==message.author.id:
+                        is_member = True
+                if is_member == False:
+                    Members[1].append(message.author.id)
             
-            await channel.send('Congratulations {} for successfully solving todays POTD!'.format(message.author.mention))
-            await solver.add_roles(role)
-            await solver.add_roles(role2)
-        elif message.content.startswith('ans='):
-            server = client.get_guild(748268625491656755)
-            role2 = server.get_role(748635877571297421)
-            solver = server.get_member(message.author.id)
-            is_member = False
-
-            await message.author.send('Unfortunately, you got the problem wrong. You dont get any points today. :(')
-            Finished_POTD[message.author.id] = 1
-
-            for i in Members[1]:
-                if i==message.author.id:
-                    is_member = True
-            if is_member == False:
-                Members[1].append(message.author.id)
-            
-            await solver.add_roles(role2)
-    else:
-        if message.content.startswith('ans='):
+                await solver.add_roles(role2)
+        else:
             await message.author.send('You have already answered todays POTD. Please wait for the next POTD to submit.')
+
     await client.process_commands(message)
 
 client.run(os.environ['TOKEN'])
