@@ -9,7 +9,7 @@ Finished_POTD = defaultdict(int)
 Members = defaultdict(list)
 leaders = {}
 
-client = commands.Bot(command_prefix = '$')
+client = commands.Bot(command_prefix = 'r/')
 client.remove_command('help')
 
 def check_staff(ctx):
@@ -28,7 +28,7 @@ async def help(ctx):
     embed.add_field(name='help', value='Pulls up this help page.', inline = False)
     embed.add_field(name='points', value='Checks how many points you have from POTDs. Aliases include pts', inline = False)
     embed.add_field(name='leaderboard', value='Pulls up the leaderboard for the POTDs. Aliases include lb', inline = False)
-    embed.add_field(name='change_problem', value='change_problem {problem ans} {point value}: Changes points and answer value for the POTD. Can only be used by staff.', inline = False)
+    embed.add_field(name='change_problem', value='change_problem {problem ans} {point value} {tries}: Changes points and answer value for the POTD. Can only be used by staff.', inline = False)
     embed.add_field(name='change_points', value='change_points {member id} {point value}: Change points for member id and point value. Can only used by staff', inline = False)
     embed.add_field(name='add_member', value='add_member {member id}:Adds member to the bot by member id. This allows them to be on the leaderboard.', inline = False)
     embed.add_field(name='How to answer POTDs', value='DM POTD Bot with your answer! Lower and upper case letters both work for multiple choice.', inline = False)
@@ -59,7 +59,7 @@ async def change_problem(ctx, arg1, arg2):
     await ctx.send('OK, changed POTD answer to ' + arg1 +' and changed point value to '+arg2)
     for i in Members[1]:
         solver = server.get_member(i)
-        Finished_POTD[i] = 0
+        Finished_POTD[i] = int(arg2)-1
         await solver.remove_roles(role)
         await solver.remove_roles(role2)
 
@@ -85,7 +85,11 @@ async def on_message(message):
         str(POTD_Answer[1])
         if message.author == client.user:
             return
-        if Finished_POTD[message.author.id] != 1:
+        if message.author.id in Members[1]:
+            pass
+        else:
+            Finished_POTD[message.author.id]=Points[0]
+        if Finished_POTD[message.author.id] != 0:
             if message.content == POTD_Answer[1] or message.content == POTD_Answer[1].lower():
                 server = client.get_guild(748268625491656755)
                 role = server.get_role(748370861727416341)
@@ -96,7 +100,7 @@ async def on_message(message):
             
                 Points[message.author.id] = Points[message.author.id] + int(Points[0])
                 await message.author.send('Congratulations! You solved todays POTD! You earned '+str(Points[0])+' points!')
-                Finished_POTD[message.author.id] = 1
+                Finished_POTD[message.author.id] = 0
                 int(Points[0])
 
                 for i in Members[1]:
@@ -114,8 +118,8 @@ async def on_message(message):
                 solver = server.get_member(message.author.id)
                 is_member = False
 
-                await message.author.send('Unfortunately, you got the problem wrong. You dont get any points today. :(')
-                Finished_POTD[message.author.id] = 1
+                await message.author.send('Unfortunately, you got the problem wrong. You have '+str(Finished_POTD[message.author.id])+' tries left.')
+                Finished_POTD[message.author.id] = int(Finished_POTD[message.author.id])-1
 
                 for i in Members[1]:
                     if i==message.author.id:
@@ -125,7 +129,7 @@ async def on_message(message):
             
                 await solver.add_roles(role2)
         else:
-            await message.author.send('You have already answered todays POTD. Please wait for the next POTD to submit.')
+            await message.author.send('You have run out of tries, please wait until the next POTD to submit.')
 
     await client.process_commands(message)
 
