@@ -9,7 +9,7 @@ Finished_POTD = defaultdict(int)
 Members = defaultdict(list)
 leaders = {}
 
-client = commands.Bot(command_prefix = 'r/')
+client = commands.Bot(command_prefix = '$')
 client.remove_command('help')
 
 def check_staff(ctx):
