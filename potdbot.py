@@ -15,7 +15,7 @@ async def create_db_pool():
     client.pg_con = await asyncpg.create_pool(database='potd_db', user='postgres', password=os.environ['pg_password'])
 
 def check_staff(ctx):
-    if ctx.message.author.id == 358334606975434752 or ctx.message.author.id == 329054903937007617:
+    if ctx.message.author.id == 358334606975434752:
         return True
     else:
         return False
@@ -32,16 +32,28 @@ async def help(ctx):
     embed.add_field(name='leaderboard', value='Pulls up the leaderboard for the POTDs. Aliases include lb', inline = False)
     embed.add_field(name='change_problem', value='change_problem {problem ans} {point value} {tries}: Changes points and answer value for the POTD. Can only be used by staff.', inline = False)
     embed.add_field(name='change_points', value='change_points {member id} {point value}: Change points for member id and point value. Can only used by staff', inline = False)
-    embed.add_field(name='add_member', value='add_member {member id}:Adds member to the bot by member id. This allows them to be on the leaderboard.', inline = False)
+    embed.add_field(name='add_member', value='add_member {member id}:Adds member by member id. This allows them to be on the leaderboard.', inline = False)
+    embed.add_field(name='remove_member', value='remove_member {member id}:Removes member by member id.', inline = False)
     embed.add_field(name='How to answer POTDs', value='DM POTD Bot with your answer! Lower and upper case letters both work for multiple choice.', inline = False)
     await ctx.send(embed=embed)
 
 @client.command(aliases = ['lb'])
 async def leaderboard(ctx):
-    num_users = await client.pg_con.fetch('SELECT COUNT(user_id) FROM users')
-    for i in len(num_users):
-        member = await client.pg_con.fetch('SELECT user_id FROM users LIMIT $1 OFFSET $1', i+1)
-        pts = await client.pg_con.fetch('SELECT points FROM users WHERE user_id = $1', member)
+    x = await client.pg_con.fetch('SELECT COUNT(user_id) FROM users')
+    y = str(x[0])
+    y = list(y)
+    num_users = []
+    for i in range(len(y)):
+        if y[i].isnumeric() == True:
+            num_users.append(y[i])
+            
+    num_users = int(''.join(num_users))
+
+    for i in range(num_users):
+        user = await client.pg_con.fetchrow('SELECT * FROM users LIMIT 1 OFFSET $1', i)
+        print(user)
+        member = user['user_id']
+        pts = user['points']
         leaders.update({member: pts})
         
     sorted_leaders = sorted(leaders.items(), key=lambda kv: kv[1], reverse=True)
@@ -66,9 +78,25 @@ async def change_problem(ctx, arg1, arg2):
     Points[0] = arg2
     await ctx.send('OK, changed POTD answer to ' + arg1 +' and changed point value to '+arg2)
 
-    num_users = await client.pg_con.fetch('SELECT COUNT(user_id) FROM users')
-    for i in len(num_users):
-        member = await client.pg_con.fetch('SELECT user_id FROM users LIMIT $1 OFFSET $1', i+1)
+    x = await client.pg_con.fetch('SELECT COUNT(user_id) FROM users')
+    y = str(x[0])
+    y = list(y)
+    num_users = []
+    for i in range(len(y)):
+        if y[i].isnumeric() == True:
+            num_users.append(y[i])
+
+    num_users = int(''.join(num_users))
+    members = []
+    for i in range(num_users):
+        user = await client.pg_con.fetchrow('SELECT * FROM users LIMIT 1 OFFSET $1', i)
+        members.append(user['user_id'])
+    print(members)
+
+    for i in members:
+        await client.pg_con.execute('UPDATE users SET tries = $1 WHERE user_id = $2', int(arg2), i)
+        member = i
+        
         solver = server.get_member(member)
         await solver.remove_roles(role)
         await solver.remove_roles(role2)
@@ -76,13 +104,24 @@ async def change_problem(ctx, arg1, arg2):
 @client.command()
 @commands.check(check_staff)
 async def add_member(ctx, arg1):
-    user = await client.pg_con.fetch('SELECT * FROM users WHERE user_id = $1', message.author.id)
+    user = await client.pg_con.fetch('SELECT * FROM users WHERE user_id = $1', int(arg1))
 
     if not user:
-        await client.pg_con.execute('UPDATE users (user_id, points, tries) VALUES ($1, 0, $2)', message.author.id, Points[0])
+        await client.pg_con.execute('INSERT INTO users(user_id, points, tries) VALUES ($1, 0, $2)', int(arg1), Points[0])
         await ctx.send('Member '+arg1+' was added.')
     else:
         await ctx.send(arg1+' is already a member.')
+
+@client.command()
+@commands.check(check_staff)
+async def remove_member(ctx, arg1):
+    user = await client.pg_con.fetch('SELECT * FROM users WHERE user_id = $1', int(arg1))
+
+    if user:
+        await client.pg_con.execute('DELETE FROM users WHERE user_id = $1', int(arg1))
+        await ctx.send('Member '+arg1+' was removed.')
+    else:
+        await ctx.send(arg1+' is not a member.')
 
 @client.command()
 @commands.check(check_staff)
@@ -100,17 +139,18 @@ async def points(ctx):
 @client.event
 async def on_message(message):
     if isinstance(message.channel, discord.channel.DMChannel):
-        str(POTD_Answer[1])
         if message.author == client.user:
             return
 
         user = await client.pg_con.fetch('SELECT * FROM users WHERE user_id = $1', message.author.id)
 
         if not user:
-            await client.pg_con.execute('UPDATE users (user_id, points, tries) VALUES ($1, 0, $2)', message.author.id, Points[0])
+            await client.pg_con.execute('INSERT INTO users(user_id, points, tries) VALUES ($1, 0, $2)', message.author.id, int(Points[0]))
 
-        attempts = await client.pg_con.fetch('SELECT tries FROM users WHERE user_id = $1', message.author.id)
+        user = await client.pg_con.fetchrow('SELECT * FROM users WHERE user_id = $1', message.author.id)
 
+        attempts = user['tries']
+        
         #if you have tries left
         if attempts != 0:
             #if you answered correctly
@@ -121,11 +161,12 @@ async def on_message(message):
                 channel = client.get_channel(748269407964364890)
                 solver = server.get_member(message.author.id)
 
-                pts = await client.pg_con.fetch('SELECT points FROM users WHERE user_id = $1', message.author.id)
-                pts = pts + Points[0]
+                pts = user['points']
+                pts = pts + int(attempts)
 
-                await client.pg_con.execute('UPDATE users SET points = $1 AND tries = 0 WHERE user_id = $2', pts, message.author.id)
-                await message.author.send('Congratulations! You solved todays POTD! You earned '+str(Points[0])+' points!')
+                await client.pg_con.execute('UPDATE users SET points = $1 WHERE user_id = $2', int(pts), message.author.id)
+                await client.pg_con.execute('UPDATE users SET tries = 0 WHERE user_id = $1', message.author.id)
+                await message.author.send('Congratulations! You solved todays POTD! You earned '+str(attempts)+' points!')
                 await channel.send('Congratulations {} for successfully solving todays POTD!'.format(message.author.mention))
                 await solver.add_roles(role)
                 await solver.add_roles(role2)
@@ -138,14 +179,14 @@ async def on_message(message):
                 attempts = attempts-1
                 await message.author.send('Unfortunately, you got the problem wrong. You have '+str(attempts)+' tries left.')
 
-                await client.pg_con.execute('UPDATE users SET tries = attempts WHERE user_id = $1', message.author.id)
+                await client.pg_con.execute('UPDATE users SET tries = $1 WHERE user_id = $2', attempts, message.author.id)
 
                 if attempts == 0:
                     await solver.add_roles(role2)
         else:
             await message.author.send('You dont have any tries left, please wait until the next POTD to submit.')
 
-        await client.process_commands(message)
+    await client.process_commands(message)
 
 client.loop.run_until_complete(create_db_pool())
 client.run(os.environ['TOKEN'])
